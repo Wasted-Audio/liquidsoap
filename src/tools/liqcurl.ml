@@ -119,28 +119,13 @@ let fail msg =
   raise
     Runtime_error.(Runtime_error { kind = "http"; msg = Some msg; pos = [] })
 
-let ftp_request ~timeout ~url () =
-  let connection = new Curl.handle in
-  try
-    connection#set_url url;
-    let body = Buffer.create 1024 in
-    connection#set_writefunction (fun s ->
-        Buffer.add_string body s;
-        String.length s);
-    connection#set_timeout timeout;
-    connection#perform;
-    connection#cleanup
-  with exn ->
-    connection#cleanup;
-    raise exn
-
 let parse_http_answer s =
   let f v c s = (v, c, s) in
   try Scanf.sscanf s "HTTP/%s %i %[^\r^\n]" f with
     | Scanf.Scan_failure s -> fail s
     | _ -> fail "Unknown errror"
 
-let rec http_request ?headers ?http_version ~follow_redirect ~timeout ~url
+let rec http_request ?headers ?http_version ?timeout ~follow_redirect ~url
     ~request ~on_body_data () =
   let connection = new Curl.handle in
   try
@@ -161,7 +146,7 @@ let rec http_request ?headers ?http_version ~follow_redirect ~timeout ~url
         | Some "1.1" -> Curl.HTTP_VERSION_1_1
         | Some "2.0" -> Curl.HTTP_VERSION_2
         | Some v -> fail (Printf.sprintf "Unsupported http version %s" v) );
-    connection#set_timeout timeout;
+    ignore (Option.map connection#set_timeout timeout);
     ( match request with
       | `Get -> connection#set_httpget true
       | `Post data ->
@@ -172,7 +157,7 @@ let rec http_request ?headers ?http_version ~follow_redirect ~timeout ~url
           connection#set_put true;
           connection#set_postfieldsize (String.length data);
           connection#set_postfields data
-      | `Head -> connection#set_nobody true
+      | `Head -> connection#set_customrequest "HEAD"
       | `Delete -> connection#set_customrequest "DELETE" );
     let response_headers = Buffer.create 1024 in
     connection#set_headerfunction (fun s ->
@@ -182,7 +167,7 @@ let rec http_request ?headers ?http_version ~follow_redirect ~timeout ~url
     match connection#get_redirecturl with
       | url when url <> "" && follow_redirect ->
           connection#cleanup;
-          http_request ?headers ?http_version ~follow_redirect ~timeout ~url
+          http_request ?headers ?http_version ~follow_redirect ?timeout ~url
             ~request ~on_body_data ()
       | _ ->
           let response_headers =

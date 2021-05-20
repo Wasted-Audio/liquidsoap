@@ -20,13 +20,13 @@
 
  *****************************************************************************)
 
-module Config = struct
-  module Http = Https_secure_transport
-
-  let url_expr = Str.regexp "^[Hh][Tt][Tt][Pp][sS]://\\([^/]+\\)\\(/.*\\)?$"
-  let default_port = 443
-end
-
-module Input_https = Http_source.Make (Config)
-
-let () = Input_https.register "https"
+val http_request :
+  ?headers:(string * string) list ->
+  ?http_version:string ->
+  ?timeout:int ->
+  follow_redirect:bool ->
+  url:string ->
+  request:[< `Delete | `Get | `Head | `Post of string | `Put of string ] ->
+  on_body_data:(string -> 'a) ->
+  unit ->
+  string * int * string * (string * string) list
